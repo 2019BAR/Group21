@@ -25,10 +25,6 @@ pacman::p_load(dplyr, d3heatmap)
 犯罪是一個國際關注的問題，但它在不同的國家以不同的方式記錄和處理。 在美國，聯邦調查局（FBI）記錄了暴力犯罪和財產犯罪。 此外，每個城市都記錄了犯罪行為，一些城市發布了有關犯罪率的數據。 伊利諾伊州芝加哥市從2001年開始在線發布犯罪數據。
 
 芝加哥是美國人口第三多的城市，人口超過270萬。在這個作業裡面，我們將關注一種特定類型的財產犯罪，稱為「汽車盜竊」，我們將使用R中的一些基本數據分析來了解芝加哥的汽車盜竊紀錄。請載入文件"data/mvtWeek1.csv"：以下是各欄位的描述：
-```{r}
-mvt <- read.csv("data/mvtWeek1.csv")
-```
-
 
 + `ID`: a unique identifier for each observation
 + `Date`: the date the crime occurred
@@ -50,43 +46,43 @@ mvt <- read.csv("data/mvtWeek1.csv")
 
 【1.1】How many rows of data (observations) are in this dataset?
 ```{r}
-nrow(mvt)
+D= read.csv("data/mvtWeek1.csv", stringsAsFactors=F)
+nrow(D)
 ```
 
 檢查各欄位的資料格式
 ```{r}
-str(mvt)
-
+str(D)
 ```
 
 類別(Factor) versus 字串(Character)
 
 【1.2】How many variables are in this dataset?
 ```{r}
-ncol(mvt)
+ncol(D)
 ```
 
 
 【1.3】Using the "max" function, what is the maximum value of the variable "ID"?
 ```{r}
-max(mvt$ID)
+max(D$ID)
 ```
 
 
 【1.4】 What is the minimum value of the variable "Beat"?
 ```{r}
-min(mvt$Beat)
+min(D$Beat)
 ```
 
 
 【1.5】 How many observations have value TRUE in the Arrest variable (this is the number of crimes for which an arrest was made)?
 ```{r}
-sum(mvt$Arrest==T)
+table(D$Arrest)  #15536
 ```
 
 【1.6】 How many observations have a LocationDescription value of ALLEY?
 ```{r}
-sum(mvt$LocationDescription=="ALLEY")
+sum(D$LocationDescription == "ALLEY")  #2308
 ```
 
 
@@ -104,38 +100,78 @@ sum(mvt$LocationDescription=="ALLEY")
 + Hour:Minute Day/Month/Year
 
 ```{r}
-date = as.POSIXct(mvt$Date, format="%m/%d/%y %H:%M")
-date
+head(D$Date)  # Month/Day/Year Hour:Minute
+```
+
+```{r}
+ts=as.POSIXct(D$Date, format="%m/%d/%y %H:%M")
+```
+
+```{r}
+par(cex=0.7)
+hist(ts,"year", las=2, freq=T, xlab="")
+```
+
+```{r}
+table(format(ts,'%u'))
+```
+
+```{r}
+table(format(ts,'%m'))
+```
+
+```{r}
+table(weekday=format(ts,'%u'), month=format(ts,'%m'))
+```
+
+```{r}
+library(magrittr)
 ```
 
 ```{r fig.height=2.5, fig.width=8}
-par(cex=0.7)
-hist(date,"year",las=2,freq=T,xlab="")
+table(format(ts,"%u"), format(ts,"%H")) %>%
+  as.data.frame.matrix %>%
+  d3heatmap(F,F,col=colorRamp(c('seagreen', 'lightyellow', 'red')))
 ```
+
 
 
 【2.2】 What is the month and year of the median date in our dataset? 
 ```{r}
-median(date)
+median(ts)  # May 2006
+#or
+summary(ts)
 ```
 
 【2.3】 In which month did the fewest motor vehicle thefts occur?
 ```{r}
-sort(table(format(date,"%m")))
+sort(table(format(ts, "%m")))  #February
+```
 
+```{r}
+#將轉換的時間新增變數到元資料框
+D$Month=months(ts)
+D$Weekday=weekdays(ts)
+D$Date=ts
+str(D)
+min(table(D$Month))
 ```
 
 【2.4】 On which weekday did the most motor vehicle thefts occur?
 ```{r}
-sort(table(format(date,"%u")))
-
+sort(table(format(ts, "%u")))  #Friday
 ```
 
 【2.5】 Which month has the largest number of motor vehicle thefts for which an arrest was made?
 ```{r}
-sort(table(format(date[mvt$Arrest],"%m")))
-
+sort(table(format(ts[D$Arrest], '%m')))  #January
 ```
+
+```{r}
+max(table(D$Month[D$Arrest==TRUE]))
+table(D$Arrest,D$Month)
+```
+
 
 <br><br>
 
@@ -145,31 +181,33 @@ sort(table(format(date[mvt$Arrest],"%m")))
 
 【3.1】 (a) In general, does it look like crime increases or decreases from 2002 - 2012? (b) In general, does it look like crime increases or decreases from 2005 - 2008? (c) In general, does it look like crime increases or decreases from 2009 - 2011?
 ```{r}
-hist(date,"year",las=2)
+hist(ts, 'year', las=2)
 ```
+
+(a) 2002-2012: crime decreases
+(b) 2005-2008: crime decreases
+(c) 2009-2011: crime increases
 
 【3.2】 Does it look like there were more crimes for which arrests were made in the first half of the time period or the second half of the time period?
 ```{r}
-table(date[mvt$Arrest]>as.POSIXct("2007-01-01"))
-#他說有被抓到的人上下半年度比較，應該要指定被抓到情況
+#the middle of the period is "2007-01-01"
+boxplot(D$Date~D$Arrest, xlab="Arrests", ylab="Date in Year") 
+#Arrests=True的中位數位置較低，more crimes in ' first half' of the time period
 ```
 
 【3.3】 For what proportion of motor vehicle thefts in 2001 was an arrest made?
 ```{r}
-sum(date[mvt$Arrest]<as.POSIXct("2001-12-31"))/sum(date<as.POSIXct("2001-12-31"))
-table(mvt$Arrest, format(date,'%Y')) %>% prop.table(2) %>% round(3)
-  
-
+prop.table(table(D$Arrest, format(ts, "%Y")),2) %>%round(3)  #0.104 in2001
 ```
 
 【3.4】 For what proportion of motor vehicle thefts in 2007 was an arrest made?
 ```{r}
-tapply(mvt$Arrest, format(date,'%Y'), mean) %>% round(3)
+prop.table(table(D$Arrest, format(ts, "%Y")),2) %>%round(3) #0.085 in 2007
 ```
 
 【3.5】 For what proportion of motor vehicle thefts in 2012 was an arrest made?
 ```{r}
-tapply(mvt$Arrest, format(date,'%Y'), mean) %>% round(3)
+prop.table(table(D$Arrest, format(ts, "%Y")),2) %>%round(3)  #0.039 in 2012
 ```
 
 <br><br>
@@ -181,33 +219,35 @@ tapply(mvt$Arrest, format(date,'%Y'), mean) %>% round(3)
 【4.1】 Which locations are the top five locations for motor vehicle thefts, excluding the "Other" category? You should select 5 of the following options.
 
 ```{r}
-top<-table(mvt$LocationDescription)%>%sort%>%tail(6)
-top
+sort(table(D$LocationDescription)) %>% tail
+#TOP5 locations: Street, Parking Lot, Alley, Gas Station, Driveway-Residential
 ```
 
-【4.2】 How many observations are in Top5?  
+【4.2】 How many observations are in Top5?
 ```{r}
-top5<-names(top)[-4]
-top[top5]  %>% sum()
-sum(mvt$LocationDescription %in% top5)
+(top5 = names(table(D$LocationDescription) %>% sort %>% tail(6))[-4])
 ```
+
+```{r}
+sum(D$LocationDescription %in% top5)  #177510 observations in Top5
+```
+
 
 【4.3】 One of the locations has a much higher arrest rate than the other locations. Which is it? 
 ```{r}
-tapply(mvt$Arrest,mvt$LocationDescription,mean)%>%
-tail(1)%>% round(3)
+TOP5= subset(D, LocationDescription %in% top5)
+tapply(TOP5$Arrest, TOP5$LocationDescription, mean)
+#GAS STATION
 ```
 
 【4.4】 On which day of the week do the most motor vehicle thefts at gas stations happen?
 ```{r}
-table(format(date[mvt$LocationDescription=="GAS STATION"],"%u"))%>%sort%>%tail(1)
+sort(table(format(ts[D$LocationDescription =="GAS STATION"], '%u')))   #Saturday
 ```
 
 【4.5】 On which day of the week do the fewest motor vehicle thefts in residential driveways happen?
 ```{r}
-table(format(date[mvt$LocationDescription== "DRIVEWAY - RESIDENTIAL"],"%u"))%>%sort%>%head(1)
-
-
+sort(table(format(ts[D$LocationDescription =="DRIVEWAY - RESIDENTIAL"], '%u')))  #Saturday
 ```
 
 
