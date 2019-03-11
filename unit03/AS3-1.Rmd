@@ -39,6 +39,9 @@ pacman::p_load(dplyr, d3heatmap)
 + `Longitude`: the longitude of the location at which the crime occurred.
 
 <br>
+```{r}
+mvt <- read.csv("data/mvtWeek1.csv")
+```
 
 - - -
 
@@ -46,7 +49,7 @@ pacman::p_load(dplyr, d3heatmap)
 
 【1.1】How many rows of data (observations) are in this dataset?
 ```{r}
-D= read.csv("data/mvtWeek1.csv", stringsAsFactors=F)
+
 nrow(D)
 ```
 
