@@ -66,18 +66,23 @@ nrow(Boeing)
 
 __§ 1.2__ What is the earliest year in our datasets?
 ```{r}
+#way1
 head(IBM$Date)
 head(GE$Date)
 head(ProcterGamble$Date)
 head(CocaCola$Date)
 head(Boeing$Date)
-#1970
+#way2
+date<-as.Date(IBM$Date,format="%m/%d/%y")
+min(date)
+#1970-01-01
 ```
 
 __§ 1.3__ What is the latest year in our datasets?
 ```{r}
-summary(IBM)
-#1009
+date<-as.Date(IBM$Date,format="%m/%d/%y")
+max(date)
+#2009-12-01
 ```
 
 __§ 1.4__ What is the mean stock price of IBM over this time period?
@@ -126,22 +131,31 @@ Boeing$Date=as.Date(Boeing$Date, "%m/%d/%y")
 
 ```{r}
 plot(CocaCola$Date,CocaCola$StockPrice, type="l")
-CocaCola$Date[which.max(CocaCola$StockPrice)]  #highest stock price in 1973
-CocaCola$Date[which.min(CocaCola$StockPrice)]  #lowest stock price in 1980
+CocaCola$Date[which.max(CocaCola$StockPrice)]  
+#highest stock price in 1973
+CocaCola$Date[which.min(CocaCola$StockPrice)]  
+#lowest stock price in 1980
 ```
 
 
 __§ 2.2__ In March of 2000, the technology bubble burst, and a stock market crash occurred. According to this plot, which company's stock dropped more?
-```{r}
+```{r fig.width=8,fig.height=5}
 plot(CocaCola$Date,CocaCola$StockPrice, type="l",col="red")
-lines(ProcterGamble$Date,ProcterGamble$StockPrice)
-#Procter and Gamble dropped more than Coca-Cola
+lines(ProcterGamble$Date,ProcterGamble$StockPrice,col="blue")
+lines(IBM$Date,IBM$StockPrice,col="grey")
+lines(GE$Date,GE$StockPrice,col="pink")
+lines(Boeing$Date,Boeing$StockPrice)
+abline(v=as.Date(c("2000/03/01")))
+
+#Procter and Gamble dropped more 
 ```
 
 __§ 2.3__ (a) Around 1983, the stock for one of these companies (Coca-Cola or Procter and Gamble) was going up, while the other was going down. Which one was going up? 
 ```{r}
 plot(CocaCola$Date,CocaCola$StockPrice, type="l",col="red")
-lines(ProcterGamble$Date,ProcterGamble$StockPrice)
+lines(ProcterGamble$Date,ProcterGamble$StockPrice,lty=2)
+abline(v=as.Date(c("1983/1/1")))
+abline(v=as.Date(c("1983/12/31")))
 #Coca-Cola was going up around 1983
 ```
 
@@ -159,11 +173,12 @@ mean(ProcterGamble$StockPrice)
 
 __§ 3.1__ Which stock fell the most right after the technology bubble burst in March 2000?
 ```{r}
-plot(CocaCola$Date[301:432], CocaCola$StockPrice[301:432], type="l",col="red", ylim = c(0,220))
+plot(CocaCola$Date, CocaCola$StockPrice, type="l",col="red", ylim = c(0,220))
 lines(IBM$Date,IBM$StockPrice,col="blue")
 lines(GE$Date,GE$StockPrice,col="green")
 lines(ProcterGamble$Date, ProcterGamble$StockPrice)
 lines(Boeing$Date,Boeing$StockPrice,col="orange")
+abline(v=as.Date(c("2000/3/1")))
 #GE fell the most
 ```
 
@@ -174,14 +189,14 @@ __§ 3.2__ Which stock reaches the highest value in the time period 1995-2005?
 
 __§ 3.3__ In October of 1997, there was a global stock market crash that was caused by an economic crisis in Asia. Comparing September 1997 to November 1997, which companies saw a decreasing trend in their stock price? (Select all that apply.)
 ```{r}
-plot(CocaCola$Date[301:432], CocaCola$StockPrice[301:432], type="l",col="red", ylim = c(0,220))
-lines(IBM$Date,IBM$StockPrice,col="blue")
-lines(GE$Date,GE$StockPrice,col="green")
-lines(ProcterGamble$Date, ProcterGamble$StockPrice)
-lines(Boeing$Date,Boeing$StockPrice,col="orange")
-abline(v=as.Date(c("1997-09-01")), lwd=2, col="purple")
-abline(v=as.Date(c("1997-11-01")), lwd=2, col="purple")
-#Procter & Gamble, Boeing
+plot(CocaCola$Date[301:432], CocaCola$StockPrice[301:432], type="l", col="green", ylim=c(0,210))
+lines(ProcterGamble$Date[301:432],ProcterGamble$StockPrice[301:432],col="blue")
+lines(IBM$Date[301:432],IBM$StockPrice[301:432],col="pink")
+lines(GE$Date[301:432],GE$StockPrice[301:432])
+lines(Boeing$Date[301:432],Boeing$StockPrice[301:432],col="red")
+abline(v=as.Date(c("1997/9/1")))
+abline(v=as.Date(c("1997/11/1")))
+#Procter & Gamble, Boeing,cocacola
 ```
 
 __§ 3.4__ In the last two years of this time period (2004 and 2005) which stock seems to be performing the best, in terms of increasing stock price?
@@ -191,8 +206,8 @@ lines(IBM$Date,IBM$StockPrice,col="blue")
 lines(GE$Date,GE$StockPrice,col="green")
 lines(ProcterGamble$Date, ProcterGamble$StockPrice)
 lines(Boeing$Date,Boeing$StockPrice,col="orange")
-abline(v=as.Date(c("2004-01-01")), lwd=2, col="brown")
-abline(v=as.Date(c("2005-01-01")), lwd=2, col="brown")
+abline(v=as.Date(c("2004-01-01")), col="brown")
+abline(v=as.Date(c("2005-01-01")), col="brown")
 #Boeing
 ```
 
@@ -217,6 +232,7 @@ sort(tapply(CocaCola$StockPrice, months(CocaCola$Date), mean))
 
 __§ 4.3__ For the months of December and January, every company's average stock is higher in one month and lower in the other. In which month are the stock prices lower?
 ```{r}
+tapply(IBM$StockPrice,months(date),mean) %>% sort()
 #December
 ```
 
