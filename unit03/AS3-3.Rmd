@@ -44,7 +44,7 @@ pacman::p_load(dplyr)
 CPS = read.csv("data/CPSData.csv")
 MetroAreaCode = read.csv("data/MetroAreaCodes.csv")
 Country = read.csv("data/CountryCodes.csv")
-library(magrittr)
+
 ```
 
 ```{r}
@@ -64,19 +64,19 @@ nrow(CPS)
 
 __§ 1.2__ Among the interviewees with a value reported for the Industry variable, what is the most common industry of employment? Please enter the name exactly how you see it.
 ```{r}
-table(CPS$Industry) %>% sort %>% tail
+table(CPS$Industry) %>% sort %>% tail(1)
 #Educational and health services
 ```
 
 __§ 1.3__ Which state has the fewest interviewees?
 ```{r}
-table(CPS$State) %>% sort %>% head
+table(CPS$State) %>% sort %>% head(1)
 #New Mexico
 ```
 
 Which state has the largest number of interviewees?
 ```{r}
-table(CPS$State) %>% sort %>% tail
+table(CPS$State) %>% sort %>% tail(1)
 #California
 ```
 
@@ -125,7 +125,10 @@ __§ 2.1__ Which variables have at least one interviewee with a missing (NA) val
 + Industry
 
 ```{r}
+#way1
 colSums(is.na(CPS)) >0
+#way2
+summary(CPS)
 #MetroAreaCode, Married, Education, EmploymentStatus, Industry
 ```
 
@@ -138,11 +141,16 @@ __§ 2.2__  Which is the most accurate:
 + The Married variable being missing is not related to the Region, Sex, Age, or Citizenship value for the interviewee.
 
 ```{r}
+#1
 table(CPS$Region, is.na(CPS$Married))
+#2
 table(CPS$Sex, is.na(CPS$Married))
+#3
 table(CPS$Age,is.na(CPS$Married))
+#4
 table(CPS$Citizenship, is.na(CPS$Married))
-#The Married variable being missing is related to the Age value for the interviewee.
+#5★★★
+lapply(CPS[c(-2,-5,-7,-12)],function(x) table(is.na(CPS$Married),x))#The Married variable being missing is related to the Age value for the interviewee.
 ```
 
 
@@ -154,12 +162,16 @@ table(CPS$State, is.na(CPS$MetroAreaCode))
 
 How many states had all interviewees living in a metropolitan area? Again, treat the District of Columbia as a state.
 ```{r}
+table(!is.na(CPS$MetroAreaCode),CPS$State)
 #3 states
 ```
 
 __§ 2.4__ Which region of the United States has the largest proportion of interviewees living in a non-metropolitan area?
 ```{r}
+#way1
 prop.table(table(CPS$Region , is.na(CPS$MetroAreaCode)),1)
+#2
+tapply(is.na(CPS$MetroAreaCode),CPS$Region,mean)
 #Midwest
 ```
 
@@ -201,19 +213,22 @@ str(CPS)
 
 How many interviewees have a missing value for the new metropolitan area variable?
 ```{r}
+#way1
 summary(CPS)
+#way2
+sum(is.na(CPS$MetroArea))
 #34238 interviewees
 ```
 
 __§ 3.3__ Which of the following metropolitan areas has the largest number of interviewees?
 ```{r}
-sort(table(CPS$MetroArea)) %>% tail
+sort(table(CPS$MetroArea)) %>% tail(1)
 #New York-Northern New Jersey-Long Island, NY-NJ-PA 
 ```
 
 __§ 3.4__ Which metropolitan area has the highest proportion of interviewees of Hispanic ethnicity?
 ```{r}
-sort(tapply(CPS$Hispanic, CPS$MetroArea, mean)) %>% tail
+sort(tapply(CPS$Hispanic, CPS$MetroArea, mean)) %>% tail(1)
 #Laredo, TX 
 ```
 
@@ -225,7 +240,7 @@ sort(tapply(CPS$Race =="Asian", CPS$MetroArea, mean)) %>% tail
 
 __§ 3.6__  Passing na.rm=TRUE to the tapply function, determine which metropolitan area has the smallest proportion of interviewees who have received no high school diploma.
 ```{r}
-sort(tapply(CPS$Education =="No high school diploma", CPS$MetroArea, mean, na.rm=TRUE)) %>% head
+sort(tapply(CPS$Education =="No high school diploma", CPS$MetroArea, mean, na.rm=TRUE)) %>% head(1)
 #Iowa City, IA
 ```
 
@@ -245,7 +260,10 @@ str(CPS)
 
 How many interviewees have a missing value for the new metropolitan area variable?
 ```{r}
+#1
 summary(CPS)
+#2
+sum(is.na(CPS$Country))
 #176 interviewees
 ```
 
@@ -257,7 +275,10 @@ sort(table(CPS$Country)) %>% tail
 
 __§ 4.3__ What proportion of the interviewees from the "New York-Northern New Jersey-Long Island, NY-NJ-PA" metropolitan area have a country of birth that is not the United States? 
 ```{r}
+#1
 tapply(CPS$Country != "United States", CPS$MetroArea == "New York-Northern New Jersey-Long Island, NY-NJ-PA", mean, na.rm=TRUE)
+#2
+table(CPS$Country=="United States",CPS$MetroArea=="New York-Northern New Jersey-Long Island, NY-NJ-PA")%>%prop.table(2)
 #0.3087
 ```
 
