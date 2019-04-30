@@ -1,0 +1,857 @@
+---
+title: "group21_ midterm"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pacman::p_load(dplyr, ggplot2, readr, plotly, googleVis)
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+讀完原始資料之後，先將資料壓縮起來，之後再從壓縮檔讀進會比較快、比較方便<br>
+```{r}
+load("data/olist.rdata")
+load("data/Z.rdata")
+locate<-read.csv("olist_geolocation_dataset.csv")
+OP<- read.csv("olist_order_payments_dataset.csv")
+PE<- read.csv("product_category_name_translation.csv")
+pop<-read.csv("population.csv")
+```
+
+
+### 一、買家賣家的位置分佈
+
+###  `買家位置分佈長條圖`
+```{r}
+tail(sort(table(C$customer_state)))
+ggplot(C, aes(x=customer_state)) + 
+  geom_bar() 
+```
+
+###  `賣家位置分佈長條圖`
+```{r}
+tail(sort(table(S$seller_state))) 
+ggplot(S, aes(x=seller_state)) + 
+  geom_bar() 
+```
+
+###  `買家位置分佈圖`
+```{r}
+countC = as.data.frame(table(C$customer_state))
+dataC <- merge(countC, pop, by.x="Var1", by.y="state")
+dataC2 <- merge(C, locate, by.x="customer_zip_code_prefix", by.y="geolocation_zip_code_prefix")
+
+library(ggplot2)
+library(plyr)
+library(maptools)
+library(sp)
+library(dplyr)
+install.packages("maps", repos = "http://cran.us.r-project.org")
+library(maps)
+Brazil<-map_data("world")%>%filter(region=="Brazil")
+
+ggplot(Brazil,aes(long,lat))+
+     geom_polygon(aes(group=group),fill="white",colour="grey60")+
+     geom_point(data=dataC,aes(x=lng,y=lat, size = Freq, color=Var1))+
+     geom_text(data=dataC, mapping = aes(x = lng, y = lat, label = Var1))
+
+```
+
+###  `賣家位置分佈圖` 
+```{r}
+
+countS = as.data.frame(table(S$seller_state))
+dataS <- merge(countS, pop, by.x="Var1", by.y="state")
+Brazil<-map_data("world")%>%filter(region=="Brazil")
+
+ggplot(Brazil,aes(long,lat))+
+     geom_polygon(aes(group=group),fill="white",colour="grey60")+
+     geom_point(data=dataS,aes(x=lng,y=lat, size = Freq,color=Var1))+
+     geom_text(data=dataS, mapping = aes(x = lng, y = lat, label = Var1))
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#從分析的結果來看，買家賣家的主要位置分布在SP、PR、MG、SC、RJ、RS這五個城市，當平台有活動想要增加促銷時，可以優先考慮將廣告投放在這幾個主要客群的城市增加銷量，達到業績提升的效果
+
+```
+
+###  `buyer and payment_type分佈` 
+```{r}
+data <- merge(OP, O, by = "order_id")
+data <- merge(data, C, by = "customer_id")
+data2<-as.data.frame(data[,c(4,16)])
+ggplot(data2, aes(x = payment_type, fill = payment_type )) + 
+  geom_bar(position="dodge") + facet_grid(~ customer_state )
+
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#各城市的主要payment_type皆以信用卡為主
+```
+
+###  ` buyer and product分佈` 
+```{r}
+I$order_id <- as.character(I$order_id )
+data$order_id <- as.character(data$order_id )
+data3 <- left_join(data, I, by = "order_id")
+data3 <-left_join(data3, P, by = "product_id")
+data4 <-as.data.frame(data3[,c(16,23)])
+
+ggplot(Brazil,aes(long,lat))+
+     geom_polygon(aes(group=group),fill="white",colour="grey60")+
+     geom_point(data=pop,aes(x=lng,y=lat,  color=max_product))+
+     geom_text(data=pop, mapping = aes(x = lng, y = lat, label = state))
+
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#從分析的結果來看，可以發現北巴西買家主要購買的產品為健康美容產品，南巴西則以寢具用品為主，休閒運動為次要的需求，各地區的賣家可以依此結果了解買家的喜好，來調整販售的產品(ex.像是大型傢俱廠商可以盡量在南巴西設廠，以減少鉅額運費的產生）
+
+```
+<br><br><hr>
+
+### 二、付款模式
+**目的**：讓平台增加曝光，提高消費者與廠商數<br>
+**分析對象**：產品<br>
+<hr>
+###  `付款模式分析與行銷`
+```{r}
+#同一筆訂單會使用多重的付款方式
+nrow(unique(OP[, 1:3])) == nrow(OP)
+#
+nrow(unique(I[, 1:3])) == nrow(I)
+```
+
+<br>
+1.付款方式
+<br>
+一筆訂單最多使用了多少種付款方式？
+```{r}
+table(OP$order_id) %>% table()
+#96479筆訂單只使用一種付款方式
+```
+
+<br>
+每一筆訂單付款方式？
+```{r}
+X = unique(I[, 1:3]) %>% left_join(OP) %>% left_join(O[,c(1,4)]) %>% left_join(P[, 1:2]) %>% left_join(PE)
+
+pie <- ggplot(X, aes(x=factor(1), fill=payment_type))+
+  geom_bar(width = 1)+
+  coord_polar("y", start = 0)+
+  labs(x="", y="", title = "Payment Type")
+pie + scale_fill_brewer(palette = "Blues")+
+  theme_minimal()
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#在此巴西電商平台中，消費者使用最頻繁的付款方式為信用卡消費，次之為Boleto支付，第三為使用兌換卷購買。
+```
+
+<br>
+<br>
+<br>
+
+2.不同付費方式之訂單中，購買的產品類別、分期數與價格間關係之分析。
+<br>
+不同付款方式的分期付款數？
+```{r}
+table(X$payment_installments)
+ggplot(X, aes(x=payment_type, fill=factor(payment_installments)))+
+  geom_bar(position = "stack")
+ggplot(X, aes(x=factor(payment_installments), group=payment_type))+
+  geom_line(aes(color=payment_type), position = "identity", stat = "count")
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#使用信用卡支付的分期付款數多為1至3次分期付款數；其他支付方式的訂單皆為一次繳清。
+```
+
+<br>
+每一筆訂單購買的產品類別，所對應到的付款方式？
+```{r fig.height=10}
+product_pay <- ggplot(X, aes(x=product_category_name, fill=payment_type))+
+  geom_bar(position = "fill")+
+  coord_flip()+ theme(axis.text.x = element_text(angle = 90, hjust = 1)) #座標軸轉換90度
+product_pay
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#所有產品種類皆以信用卡付款為大宗
+```
+
+<br>
+不同付款方式與價格之關係。
+```{r}
+ggplot(X, aes(x=payment_type, y=payment_value))+
+  geom_boxplot()
+ggplot(X, aes(x=payment_type, y=log(payment_value)))+
+  geom_boxplot()
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#使用兌換卷消費的訂單交易成本中位數較低。
+#其他無明顯差異。
+```
+
+<br>
+不同分期付款次數下的交易成本？
+# ```{r}
+# statistic <- group_by(X, payment_installments) %>%
+#   summarise(
+#     noOrder = n(),
+#     avgpay = mean(payment_value)
+#   )
+# statistic
+# ggplot(statistic, aes(x=payment_installments, y= avgpay))+
+#   geom_point(color= "#993333", size= 3,)
+# ```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#分期次數越高，單筆平均交易成本越高。
+```
+
+<br>
+
+
+### 三、寄送貨物到顧客手中時間差異
+**目的**：
+a.推斷時間最長之貨物種類 與最短之貨物種類。}
+b.推斷貨物體積與寄送時間差異。
+c.推斷貨物重量與寄送時間差異。
+{d.推斷貨品寄送時間與評價的差異。}
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+```
+
+###`新增一列deltime計算時間差`
+```{r}
+#轉換資料格式
+O$order_delivered_customer_date= as.POSIXct(as.character(O$order_delivered_customer_date),format="%Y-%m-%d %H:%M")
+O$order_purchase_timestamp= as.POSIXct(as.character(O$order_purchase_timestamp),format="%Y-%m-%d %H:%M")
+
+#在O中新增一列 運送時間 O1為增加欄位後資料
+O1= mutate(O, deltime=order_delivered_customer_date - order_purchase_timestamp) %>% arrange(desc(deltime))
+#deltime 時間差(hr)
+```
+
+###a推斷時間最長之貨物種類 與最短之貨物種類
+```{r}
+#a:推斷時間最長之貨物種類 與最短之貨物種類
+O2<-O1 %>% left_join(I) %>% left_join(P) #併表 加入product category
+aO2= select(O2,contains("deltime"),contains("category"))%>%arrange(desc(deltime)) #aO2剩下deltime時間差及產品類+依時間差做排序
+#aO2h<- filter(aO2,deltime>2000) #有104件
+#aO2l<- filter(aO2,deltime<30)#198件
+table(filter(aO2,deltime>2000)$product_category_name)%>%sort()%>%tail(3)
+table(filter(aO2,deltime<30)$product_category_name)%>%sort()%>%tail(3)
+
+```
+
+###以下分佈是為了查看、驗證貨物種類與寄送時間的關係
+```{r}
+#informatica_acessorios的時間分布
+aOia= filter(aO2,product_category_name=="informatica_acessorios") 
+ggplot(aOia,aes(x = product_category_name, y =deltime))+
+  geom_jitter()
+#Automotivo的時間分布
+aOa= filter(aO2,product_category_name=="automotivo")
+ggplot(aOa,aes(x = product_category_name, y = deltime))+
+  geom_jitter()
+#Moveis_decoracao的時間分布
+aOmd= filter(aO2,product_category_name=="moveis_decoracao")
+ggplot(aOmd,aes(x = product_category_name, y = deltime))+
+  geom_jitter()
+```
+
+###b 推斷貨物體積與寄送時間差異
+```{r}
+#先前的O2中已有長寬高資料
+bO2= mutate(O2, volume=product_length_cm*product_height_cm*product_width_cm) %>%
+  select(contains("volume"),contains("deltime")) 
+bO2=arrange(bO2,desc(deltime)) 
+ggplot(bO2,aes(x = volume, y = deltime)) +
+  geom_jitter(colour = "orange",alpha=0.5)+ #貨物體積與寄送時間差關係圖(只有體小的才會送比較久，大的反而還好)
+  xlab("volumes") + ylab("delivery time") 
+lm(volume~deltime,data=bO2) %>% summary #p value<2.2e-16 小於0.005 有顯著關係
+
+```
+
+###c.推斷貨物重量與寄送時間差異
+```{r}
+#先前的O2中已有重量資料
+cO2= select(O2,contains("weight"),contains("deltime")) %>%
+  arrange(desc(deltime)) 
+ggplot(cO2,aes(x = product_weight_g, y = deltime))+
+  geom_jitter(colour = "orange",alpha=0.5)+#貨物重量與寄送時間差關係圖 
+  xlab("product weight(g)") + ylab("delivery time")
+lm(product_weight_g~deltime,data=cO2) %>% summary#p value<2.2e-16 小於0.005 有顯著關係
+```
+
+###d推斷貨品寄送時間與評價的差異
+```{r}
+O3<- O1 %>% left_join(R) 
+dO3<-  select(O3,contains("score"),contains("deltime")) %>%
+  arrange(desc(deltime)) 
+ggplot(dO3,aes(x = review_score, y = deltime)) +
+  geom_jitter(colour = "orange",alpha=0.5)+
+  geom_hline(aes(yintercept=5000), colour="red", linetype="dashed")+
+  xlab("review score") + ylab("delivery time")
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#無明顯差異(運送時間可能只是其中一項影響評價的因素)
+# 若運送時間在1500hrs以上，仍沒有辦法明顯看出會落在低評價區域，但運送時間5000hrs以上的店家均落在評分1及2
+```
+
+###  四、寄送貨物到物流公司的時間差異
+###`(a)限制店家寄出時間與實際店家寄出時間差異與關係，然後再與商品類別作結合，判斷出哪些產品廠商容易超過時間寄送。`
+
+
+```{r}
+A1 = merge(I,O,by="order_id") # #讓有限制店家寄出時間和實際寄送到物流的時間合併
+A2 = merge(P,TPC, by="product_category_name")  #合併都有商品類別工作表
+A3 = merge(A1,A2,by="product_id") #合併時間差異和有商品類別工作表
+rm.A3=A3[complete.cases(A3), ] #這時候再統一剃除NA缺漏值                               
+```
+
+#算出shipping_limit_date 和order_delivered_carrier_date差異
+#再分級距 分別是沒有超過時間、1星期內、1星期以上、1個月以上
+```{r fig.height=10}
+#我們將兩個寄出時間從"字串"轉為"日期" 這時候單位是"days 天數"
+order_delivered_carrier_date=as.Date(rm.A3$order_delivered_carrier_date,format= "%Y-%m-%d")
+shipping_limit_date=as.Date(rm.A3$shipping_limit_date,format= "%Y-%m-%d")
+
+#兩個寄出時間相減並命名為overtime 意思是超時 
+overtime=(order_delivered_carrier_date-shipping_limit_date)
+
+#再分別將將overtime超時訂單時間由大到小印出來
+overtime=as.numeric(overtime)  #弄成數值
+overtime=as.data.frame(overtime)#弄成資料框
+
+Overtime=cut(overtime$overtime,breaks=c(-Inf,0,7,30,Inf),labels=c("on time","1~7","7~30","above 30"),right = F) 
+ #再分級距 分別是沒有超過時間、1星期內、1星期以上、1個月以上
+
+A4=mutate(rm.A3,Overtime=cut(overtime$overtime,breaks=c(-Inf,0,7,30,Inf),labels=c("<=0","1~7","7~30","above 30"),right = F))
+
+ggplot(A4, aes(product_category_name_english,fill=Overtime),
+     main="Time difference ",xlab="product_category_name_english",ylab="count") + geom_bar(position="fill")+
+     coord_flip()+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#可以看出大部分訂單是沒有超過時間的
+```
+
+#算出shipping_limit_date 和order_delivered_carrier_date差異
+##弄級距 有超時7天內 7天~1個月 1個月以上 (未包含準時訂單)
+```{r fig.height=10}
+#我們將兩個寄出時間從"字串"轉為"日期" 這時候單位是"days 天數"
+order_delivered_carrier_date=as.Date(rm.A3$order_delivered_carrier_date,format= "%Y-%m-%d")
+shipping_limit_date=as.Date(rm.A3$shipping_limit_date,format= "%Y-%m-%d")
+
+#兩個寄出時間相減並命名為overtime 意思是超時 
+overtime = (order_delivered_carrier_date-shipping_limit_date)
+
+#再分別將將overtime超時訂單時間篩選出
+overtime1 = subset(overtime,overtime>0) %>% sort(decreasing = T)
+overtime2 = as.numeric(overtime1)
+overtime3 = as.data.frame(overtime2)
+
+ 
+#哪些是超時寄出的商品類別? 命名為product_category_name_english
+product_category_name_english=rm.A3$product_category_name_english[which(order_delivered_carrier_date>shipping_limit_date)]
+
+Overtime=cut(overtime3$overtime2,breaks=c(0,7,30,Inf),labels=c("1~7","7~30","above 30"),right = F)  #分級距 有超時7天內 7天~1個月 1個月以上
+
+
+#建立一個新的資料框
+A5=data.frame(product_category_name_english=product_category_name_english,Overtime=Overtime)
+
+ggplot(A5, aes(product_category_name_english,fill=Overtime) )+ geom_bar(position="fill")+
+  labs(title="The relationship between product_category and Overtime day",x="product_category_name_english",y="count",fill="Overtime") +
+  coord_flip()+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+#取Top10超時商品類別(資料級距未包含準時訂單)
+```{r}
+Top10<-table(A5$product_category_name_english)%>%sort%>%tail(10)
+
+A6<-filter(A5,A5$product_category_name_english%in%names(Top10))
+#取前十大超時訂單數最多的
+
+B2<-ggplot(A6,aes(x=product_category_name_english,fill=Overtime))+geom_bar()+ theme(axis.text.x=element_text(angle=45, hjust=1))
+#可看出各級距的實際訂單數
+B3<-ggplot(A6,aes(x=product_category_name_english,fill=Overtime))+geom_bar(position="fill")+ theme(axis.text.x=element_text(angle=45, hjust=1))
+#可看出各級距的比例
+B2 
+B3
+
+```
+
+###`(b)超時寄送的產品評價(包含準時、超時訂單)`
+```{r}
+#把產品評論R剔除缺漏值
+rm.R=R[complete.cases(R), ]
+#我們再將rm.A3、rm.R合併工作表，命成為R1
+R1=merge(rm.A3,rm.R,by="order_id")
+
+#我們將R1轉換成日期，相減再命命為
+R1$order_delivered_carrier_date<-as.Date(R1$order_delivered_carrier_date,format= "%Y-%m-%d")
+R1$shipping_limit_date<-as.Date(R1$shipping_limit_date,format= "%Y-%m-%d")
+R1$overtime=(R1$order_delivered_carrier_date-R1$shipping_limit_date)
+
+
+#我們將R1資料框當中包含"評分score"、"超時overtime"的欄位選出來
+#命名為R2
+#再用ggplot作圖
+#可以看出
+R2<-  select(R1,contains("score"),contains("overtime")) 
+ggplot(R2,aes(x = review_score, y = overtime)) +
+  geom_jitter(color="993339")
+  
+
+```
+
+###`(b)超時寄送的產品評價(只包含超時訂單)`
+```{r}
+#把產品評論R剔除缺漏值
+rm.R=R[complete.cases(R), ]
+#我們再將rm.A3、rm.R合併工作表，命成為R1
+R1=merge(rm.A3,rm.R,by="order_id")
+R1$order_delivered_carrier_date<-as.Date(R1$order_delivered_carrier_date,format= "%Y-%m-%d")
+R1$shipping_limit_date<-as.Date(R1$shipping_limit_date,format= "%Y-%m-%d")
+R1$overtime=(R1$order_delivered_carrier_date-R1$shipping_limit_date)
+
+
+#我們將R1資料框當中包含"評分score"、"超時overtime"的欄位選出來
+#命名為R2
+#再用ggplot作圖
+#可以看出
+R2<-  select(R1,contains("score"),contains("overtime")) 
+ggplot(R2,aes(x = review_score, y = overtime)) +
+  geom_jitter(color="993339")+
+  ylim(c(0,30))+
+  geom_hline(aes(yintercept=10),colour="black",linetype="dashed")
+                                #可以看出越容易超時的產品 通常評分越低
+
+lm(review_score~ overtime,data=R2)%>%summary()#且我們可以用迴歸分析來看
+                                 #P-value<0.05 有顯著性
+```
+
+#`(C)產品超時寄出是否與產品價格有關聯 (包含準時、超時訂單)`
+```{r}
+
+ggplot(rm.A3,aes(x=overtime,y=price ))+
+  geom_point(alpha = 1/5,position = 'jitter',stat="identity",color="993338")+
+  xlim(c(-500,100))+
+  ylim(c(0,7000))   #未排除沒有超時overtime的資料(包含overtime<0 未超時的產品)
+  lm(price~ overtime,data=rm.A3) %>% summary() 
+                               #且P-value=0.000337<0.05  產品超時寄出、產品價格有顯著性
+```
+
+###`(C)產品超時寄出是否與產品價格有關聯 (只含超時訂單) `
+```{r}
+ggplot(rm.A3,aes(overtime,price))+
+  geom_point(alpha = 1/5,position = 'jitter',stat="identity",color="993338")+
+  xlim(c(0,100))+
+  ylim(c(0,7000)) #已排除無超時overtime數據(x軸下限=0)，
+                  #目測出價格越便宜產品，越容易超時
+                  #我們再進一步往下看
+lm(price~ overtime,data=rm.A3)%>%summary()     
+                   #且P-value=0.000337<0.05 
+                   #產品超時寄出、產品價格有顯著性
+```
+
+###`(C)產品超時寄出是否與產品價格有關聯(只含超時訂單且在價格500畫一輔助線) `
+```{r}
+ggplot(rm.A3,aes(overtime,price))+
+  geom_point(alpha = 1/5,position = 'jitter',stat="identity",color="993338")+
+  xlim(c(0,100))+
+  ylim(c(0,7000)) +
+  geom_hline(aes(yintercept=500),colour="black",linetype="dashed")
+                 #已排除overtime(x軸下限=0),且把價格訂500當輔助線
+                 #目測出價格越便宜的商品，越容易超時
+lm(price~ overtime,data=rm.A3)%>%summary()
+                 #且P-value=0.000337<0.05  產品超時寄出、產品價格有顯著性
+```
+
+### 五、評論
+
+```{r}
+load("data/olist.rdata")
+library(plotly)
+install.packages("devtools", repos = "http://cran.us.r-project.org")
+install.packages("Rmisc", repos = "http://cran.us.r-project.org")
+library(Rmisc)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+library(ggthemes)
+library(devtools)
+install_github("cttobin/ggthemr",force=TRUE)
+library(ggthemr)
+ggthemr("sea")
+```
+
+###`2.評論系統改善(加強顧客填表單的比率與速度，給予回饋或是其他行銷)`
+###`a.填表速度與寄送時間的關係，填表的時間與評論之間的關係。(會不會因為填寫時間長是因為體驗時間導致，說不定填寫越久，體驗越久，評分越高)可以探討進行行銷活動促使評論時間縮短，或是給予顧客賞味期再寄出滿意表。`
+
+###`每個產品的評論`
+```{r fig.height=10}
+P1<-left_join(P,TPC,by="product_category_name")
+I1<-I[,c(1,3)]
+P2<-merge(P1,I1,by="product_id",all.x=T)
+PandR<-merge(R,P2,by="order_id",all.x=T,all.y=T)
+par(cex=1,mar=c(3,3,5,2),cex.axis=5)
+
+ggplot(PandR,aes(x=PandR$product_category_name_english,fill = PandR$review_score),width=1) +
+  geom_bar(aes(fill=factor(review_score)),position= "fill")+ coord_flip()
+```
+
+###`每個產品的運送時間`
+```{r fig.height=10}
+#日期轉化，計算寄出到回答完畢的時間
+PandR$review_creation_date<-as.Date(PandR$review_creation_date,format="%Y-%m-%d") 
+PandR$review_answer_timestamp<-as.Date(PandR$review_answer_timestamp,format="%Y-%m-%d")
+PandR$diff<-PandR$review_answer_timestamp-PandR$review_creation_date
+table(PandR$diff)%>%table
+
+PandR$diff<-as.numeric(PandR$diff)
+PandR$diff1<-cut(PandR$diff,breaks=c(-1,0,3,30,Inf),labels=c("0","1~3","3~30","above 30"))
+par(cex=1,mar=c(3,3,5,2),cex.axis=5)
+ggplot(PandR,aes(x=PandR$product_category_name_english,fill = factor(PandR$diff1)),width=1) +
+  geom_bar(position= "fill")+ coord_flip()
+```
+
+```{r}
+#日期轉化，計算寄出到回答完畢的時間
+R$review_creation_date<-as.Date(R$review_creation_date,format="%Y-%m-%d") 
+R$review_answer_timestamp<-as.Date(R$review_answer_timestamp,format="%Y-%m-%d")
+R$diff<-R$review_answer_timestamp-R$review_creation_date
+table(R$diff)%>%table
+
+R$diff<-as.numeric(R$diff)
+R$diff1<-cut(R$diff,breaks=c(-1,0,3,30,Inf),labels=c("0","1~3","3~30","above 30"))
+
+P3<-P1[,c(1,10)]
+n_distinct(I$product_id)
+I1<-left_join(I,P,by="product_id")
+RandI<-merge(R,I1,by="order_id",all.x=T,all.y=T)
+duplicated(RandI$order_id)%>%table
+RandI<-left_join(RandI,TPC,by="product_category_name")
+RandI$review_score<-as.numeric(RandI$review_score)
+#每個評分高低含有多少比例的體驗天數
+f<-ggplot(RandI,aes(review_score))+geom_bar(aes(fill=factor(diff1)),position="fill")+
+labs(title="The relationship between the review score and experience day",x="Review",y="probability",fill="Days") +
+scale_fill_brewer(palette="Black")+theme_bw()
+ggplotly(f)
+#每個體驗天數間距的評分高低分布
+f1<-ggplot(RandI,aes(diff1))+geom_bar(aes(fill=factor(review_score)),position="fill")+
+labs(title="The relationship between the review score and experience day",x="Days",y="probability",fill="Days")+theme_bw() 
+ggplotly(f1)
+
+lm(RandI$review_score~ RandI$diff) %>%summary
+#由回歸來看，天數高低的效果對於平輪的高低是沒有顯著影響的。
+
+```
+
+###`b.有文字評論的比率，更進階推論哪些會比較容易有文字評論，而那些較少。`
+產品種類與評論關係 哪些產品常常給予評論
+```{r}
+is.na(RandI$review_comment_message)%>%table
+#將NA變成0，將不是NA的變成1
+RandI$review_comment_message[!is.na(RandI$review_comment_message)]<-TRUE
+RandI$review_comment_title[!is.na(RandI$review_comment_title)]<-TRUE
+RandI$review_comment_message[is.na(RandI$review_comment_message)] <- FALSE
+RandI$review_comment_title[is.na(RandI$review_comment_title)] <- FALSE
+
+``` 
+
+```{r fig.height=10,fig.width=10}
+#總填寫率與總填寫率
+table(RandI$review_comment_title)
+table(RandI$review_comment_message)
+table(RandI$review_comment_title==F&RandI$review_comment_message==F)
+
+```
+
+```{r fig.height=10,fig.width=10}
+#前10大銷量產品填寫率
+Top10<-table(RandI$product_category_name_english)%>%sort%>%tail(10)
+RandI1<-filter(RandI,RandI$product_category_name_english%in%names(Top10))
+f2<-ggplot(RandI1,aes(x=product_category_name_english,fill=review_comment_message))+geom_bar()+ theme(axis.text.x=element_text(angle=45, hjust=1))
+f3<-ggplot(RandI1,aes(x=product_category_name_english,fill=review_comment_message))+geom_bar(position="fill")+ theme(axis.text.x=element_text(angle=45, hjust=1))
+multiplot(f2,f3)
+```
+
+```{r}
+table(RandI1$product_category_name_english,RandI1$review_comment_message)
+duplicated(R$review_id)%>%table
+duplicated(R$order_id)%>%table
+table(R$review_id) %>% table
+table(R$order_id) %>% table
+table(R$review_id)%>%sort%>%tail(26)
+```
+
+### 六、種類季度
+
+### `資料期間四個季度的銷售總額`
+擷取／合併資料
+```{r}
+orderPrice = select(I,"order_id","price")
+orderTime = select(O,"order_id","order_purchase_timestamp") 
+order = merge(orderPrice, orderTime, by="order_id")
+
+```
+
+日期轉換、增加季度欄位
+```{r}
+order$order_purchase_timestamp = as.Date(order$order_purchase_timestamp, format ="%Y-%m-%d")
+
+order$month = format(order$order_purchase_timestamp, format = "%m")
+#order$quarter = 
+#order = mutate(order,month)
+
+order$quarter[order$month %in% c("01","02","03")] = "Q1"
+order$quarter[order$month %in% c("04","05","06")] = "Q2"
+order$quarter[order$month %in% c("07","08","09")] = "Q3"
+order$quarter[order$month %in% c("10","11","12")] = "Q4"
+
+```
+
+計算四個季度的銷售總額
+```{r}
+
+#salesOfQuarter = group_by(order,quarter) %>% 
+#  summarise(amount = n(),
+#            sales = sum(price))
+#salesOfQuarter
+
+```
+
+```{r}
+#ggplot(salesOfQuarter,aes(x=quarter, y=sales, group = 1))+
+#  geom_line(col= "red")
+
+
+```
+
+
+### `前十大類型商品的季度銷售額`
+
+擷取／合併資料
+```{r}
+productID = select(I,"order_id","product_id")
+productCategory = select(P,"product_id","product_category_name") 
+product = merge(productID, productCategory ,by="product_id")
+A = merge(order, product ,by="order_id")
+```
+
+選出總銷售額前十大種類商品
+```{r}
+tail(sort(tapply(A$price, A$product_category_name, sum)),10)
+```
+
+選出總銷售額前十大種類商品
+```{r}
+
+tail(sort(tapply(A$price, A$product_category_name, sum)),10)
+
+```
+
+###`計算「前十大種類商品在每個季度總銷售額」並製作新的資料框`
+top1:beleza_saude
+```{r}
+beleza_saude = subset(A,product_category_name %in% "beleza_saude")
+tapply(beleza_saude$price,beleza_saude$quarter,sum)
+
+```
+
+top2:cama_mesa_banho
+```{r}
+cama_mesa_banho = subset(A,product_category_name %in% "cama_mesa_banho")
+tapply(cama_mesa_banho$price,cama_mesa_banho$quarter,sum)
+
+```
+
+top3:informatica_acessorios
+```{r}
+informatica_acessorios = subset(A,product_category_name %in% "informatica_acessorios")
+tapply(informatica_acessorios$price,informatica_acessorios$quarter,sum)
+
+```
+
+top4:relogios_presentes
+```{r}
+relogios_presentes = subset(A,product_category_name %in% "relogios_presentes")
+tapply(relogios_presentes$price,relogios_presentes$quarter,sum)
+
+```
+
+top5:esporte_lazer
+```{r}
+esporte_lazer = subset(A,product_category_name %in% "esporte_lazer")
+tapply(esporte_lazer$price,esporte_lazer$quarter,sum)
+
+```
+
+top6:moveis_decoracao
+```{r}
+moveis_decoracao = subset(A,product_category_name %in% "moveis_decoracao")
+tapply(moveis_decoracao$price,moveis_decoracao$quarter,sum)
+
+```
+
+top7:utilidades_domesticas
+```{r}
+utilidades_domesticas = subset(A,product_category_name %in% "utilidades_domesticas")
+tapply(utilidades_domesticas$price,utilidades_domesticas$quarter,sum)
+
+```
+
+top8:automotivo
+```{r}
+automotivo = subset(A,product_category_name %in% "automotivo")
+tapply(automotivo$price,automotivo$quarter,sum)
+
+```
+
+top9:ferramentas_jardim
+```{r}
+ferramentas_jardim = subset(A,product_category_name %in% "ferramentas_jardim")
+tapply(ferramentas_jardim$price,ferramentas_jardim$quarter,sum)
+
+```
+
+top10:cool_stuff
+```{r}
+cool_stuff = subset(A,product_category_name %in% "cool_stuff")
+tapply(cool_stuff$price,cool_stuff$quarter,sum)
+
+```
+
+製作新的資料框
+```{r}
+top10 = (names(tail(sort(tapply(A$price, A$product_category_name, sum)),10)))
+TOP10 = subset(A,product_category_name %in% top10)
+
+Category <- c("cool_stuff","cool_stuff","cool_stuff","cool_stuff",
+              "garden_tools","garden_tools","garden_tools","garden_tools",
+              "auto","auto","auto","auto",
+              "housewares","housewares","housewares","housewares",
+              "furniture_decor","furniture_decor","furniture_decor","furniture_decor",
+              "sports_leisure", "sports_leisure", "sports_leisure", "sports_leisure",
+              "watches_gifts","watches_gifts","watches_gifts","watches_gifts",
+              "computers_accessories","computers_accessories","computers_accessories","computers_accessories",
+              "bed_bath_table","bed_bath_table","bed_bath_table","bed_bath_table",
+              "health_beauty","health_beauty","health_beauty","health_beauty")
+Quarter <- c("Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4",
+             "Q1","Q2","Q3","Q4")
+
+Price <- c("161979","188234","180214","153771",
+             "180176","194673","144528","168498",
+             "180421","232409","208158","113335",
+             "194327","320049","251615","106880",
+             "315014","321749","271205","230526",
+             "364686","319870","286888","207942",
+             "312307","435710","307641","255053",
+             "481820","371371","269516","242749",
+             "353638","409276","388643","268800",
+             "346760","461876","419853","206181")
+price <- as.numeric(Price)
+
+B = data.frame(Category,Quarter,price)
+
+B
+```
+
+前十大類型商品佔四季銷售總額
+```{r}
+c1=ggplot(B,aes(x=Quarter,y=price, fill=Category))+
+  geom_bar(stat="identity")
+ggplotly(c1)
+
+
+```
+
+前十大類型商品佔四季銷售比例
+```{r}
+c2=ggplot(B,aes(x=Quarter,y=price, fill=Category))+
+  geom_bar(stat="identity",position="fill")
+ggplotly(c2)
+```
+
+前十大類型商品的季度銷售額
+```{r}
+B$Category = factor(B$Category, levels=c("health_beauty","bed_bath_table","computers_accessories","watches_gifts","sports_leisure","furniture_decor","housewares","auto","garden_tools","cool_stuff"))
+
+b1=ggplot(B,aes(x=Category,y=price,fill=Quarter, group = factor(1)))+
+  geom_bar(stat="identity")+coord_flip()
+
+
+ggplotly(b1)
+
+```
+
+前十大類型商品的季度銷售比例
+```{r}
+b2=ggplot(B,aes(x=Category,y=price,fill=Quarter, group = factor(1)))+
+  geom_bar(stat="identity",position="fill")+coord_flip()
+
+
+ggplotly(b2)
+
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span>
+結論
+```{r}
+#‧平台銷售額在第二季度最高；第一、三季度差不多；第四季度最低
+#‧computers_accessories、sports_leisure、furniture_decor 三種類在第一季度賣得最好；
+# garden_tools、watches_gifts、housewares 三種類在第二季度賣得最好；
+#health_beauty、bed_bath_table、auto、cool_stuff  四種類在第三季度賣得最好
+```
+
+
+
+
+
+
+
