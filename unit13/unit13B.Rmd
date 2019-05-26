@@ -1,0 +1,255 @@
+---
+title: UNIT13B：類別模型、預測機率與商業決策 
+subtitle: 模型的準確性
+author: 中山大學管理學院 第21組
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: style.css
+---
+給個8~10分好嗎QAQ，不要那麼殘忍O3O<br>
+　　　　██▒▒▒▒███▒▒▒▒██ <br>
+　　　　█▓▓█▒██▓▓▓██▒█▓▓█ <br>
+　　　█▓▒▒▓█▓▓▓▓▓▓▓█▓▒▒▓█ <br>
+　　　█▓▒▒▓▓▓▓▓▓▓▓▓▓▓▒▒▓█ <br>
+　 　　 █▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█ <br>
+　　　 　█▓▓▓▓▓▓▓▓▓▓▓▓▓█ <br>
+　　　 　█▓▓██▓▓▓▓▓██▓▓█ <br>
+　　 　 █▓▓▓▓▒▒█▓█▒▒▓▓▓▓█ <br>
+　　　█▓▓▒▒▓▒▒███▒▒▓▒▒▓▓█ <br>
+　　　█▓▓▒▒▓▒▒▒█▒▒▒▓▒▒▓▓█ <br>
+　　　█▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▓█ <br>
+　　　　█▓▓▓▓▓▓███▓▓▓▓▓▓█ <br>
+　 　　　█▓▓▓▓▓▓▓▓▓▓▓▓▓█ <br>
+　 　 　 █▓▓▓▓▒▒▒▒▒▒▒▓▓▓▓█ <br>
+　 　　█▓▓▓▓▒▒▒▒▒▒▒▒▒▓▓▓▓█ <br>
+　 　█▓▓▓█▓▒▒▒▒▒▒▒▒▒▓█▓▓▓█ <br>
+  　██▓▓▓█▓▒▒▒██▒██▒▒▒▓█▓▓▓██ <br>
+  █▓▓▓▓█▓▓▒▒█▓▓█▓▓█▒▒▓▓█▓▓▓▓█ <br>
+  █▓██▓▓█▓▒▒▒█▓▓▓▓▓█▒▒▒▓█▓▓██▓█ <br>
+  █▓▓▓▓█▓▓▒▒▒▒█▓▓▓█▒▒▒▒▓▓█▓▓▓▓█ <br>
+ 　█▓▓▓█▓▓▒▒▒▒▒█▓█▒▒▒▒▒▓▓█▓▓▓█ <br>
+　　████▓▓▒▒▒▒▒▒█▒▒▒▒▒▒▓▓████ <br>
+　　　　█▓▓▓▒▒▒▒▒▒▒▒▒▒▒▓▓▓█ <br>
+　　 　 　 █▓▓▓▒▒▒▒▒▒▒▒▒▓▓▓█ <br>
+　　　　　█▓▓▓▓▒▒▒▒▒▒▒▓▓▓▓█ <br>
+　　 　 　　█▓▓▓▓▓█▓█▓▓▓▓▓█ <br>
+　　 　 　　　█▓▓▓▓▓█▓▓▓▓▓█ <br>
+　　 　 　　███▓▓▓▓▓█▓▓▓▓▓███ <br>
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# Formating Codes.  Do not change the codes in this chunk !!
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8)
+options(scipen=20, digits=5, width=80)
+if(!require(pacman)) install.packages("pacman")
+```
+<hr>
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pacman::p_load(caTools, ggplot2, dplyr)
+D = read.csv("data/quality.csv")  # Read in dataset
+set.seed(88)
+split = sample.split(D$PoorCare, SplitRatio = 0.75)  # split vector
+TR = subset(D, split == TRUE)
+TS = subset(D, split == FALSE)
+glm1 = glm(PoorCare ~ OfficeVisits + Narcotics, TR, family=binomial)
+summary(glm1)
+```
+<br><hr>
+
+
+### 【A】傳統準確性指標
+
+![Fig 13.1 - 混淆矩陣與模型準確性指標](Fig13.1.JPG)
+
+<br>
+
+##### Training Data
+
+**預測機率 Predicted Probability (Training)**
+```{r fig.height=3.2, fig.width=6.4}
+par(cex=0.8)
+pred = predict(glm1, type="response")
+hist(pred)
+abline(v=0.5, col='red')
+```
+
+**混淆矩陣 Confusion Matrix (Training)**
+```{r}
+#建立矩陣
+cmx = table(Acture=TR$PoorCare, Predict=pred > 0.5)
+cmx
+```
+
+**模型準確性指標 Accuracy Matrices (Training)**
+```{r}
+#建立算式 應用於矩陣
+A2x2 = function(x, k=3) c(
+  accuracy = sum(diag(x))/sum(x),
+  sensitivity = as.numeric(x[2,2]/rowSums(x)[2]),
+  specificity = as.numeric(x[1,1]/rowSums(x)[1])
+  ) %>% round(k)
+A2x2(cmx)
+```
+<br>
+
+##### Testing Data
+
+**預測機率 Predicted Probability (Testing)**
+```{r fig.height=3.2, fig.width=6.4}
+par(cex=0.8)
+pred2 = predict(glm1, newdata=TS, type="response")
+hist(pred2, 10)
+abline(v=0.5, col='red')
+```
+
+**混淆矩陣 Confusion Matrix (Testing)**
+```{r}
+cmx2 = table(Acture=TS$PoorCare, Predict=pred2 > 0.5)
+cmx2
+```
+
+**模型準確性指標 Accuracy Matrices (Testing)**
+```{r}
+sapply(list(Train=cmx, Test=cmx2), A2x2)
+#若Test比Train好那就不錯
+#如果Train比Test好，那就要看有沒有過度配適
+```
+<br><br><hr>
+
+### 【B】預測機率分佈、臨界機率、混淆矩陣
+
+![Fig 13.2 - 預測機率分佈、臨界機率、混淆矩陣](Fig13.2.JPG)
+
+<br>
+
+**預測機率分佈 (DPP) - Distribution of Predicted Probability (Training)**
+```{r fig.height=3.2, fig.width=7}
+data.frame(y=factor(TR$PoorCare), pred=pred) %>% 
+  ggplot(aes(x=pred, fill=y)) + 
+  geom_histogram(bins=20, col='white', position="stack", alpha=0.5) +
+  ggtitle("Distribution of Predicted Probability (DPP)") +
+  xlab("predicted probability")
+
+data.frame(y=factor(TS$PoorCare), pred=pred2) %>% 
+  ggplot(aes(x=pred2, fill=y)) + 
+  geom_histogram(bins=20, col='white', position="stack", alpha=0.5) +
+  ggtitle("Distribution of Predicted Probability (DPP)") +
+  xlab("predicted probability")
+```
+<br><br><br><hr>
+
+### 【C】作業曲線(ROC)與辨識率(AUC)
+
+**ROC - Receiver Operation Curve**
+```{r fig.height=4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.8)
+#colAUC(預測機率,目標向量,plotROC[畫ROC圖])
+trAUC = colAUC(pred, y=TR$PoorCare, plotROC=T)
+tsAUC = colAUC(pred2, y=TS$PoorCare, plotROC=T)
+```
+
+**AUC - Area Under Curve**
+```{r}
+c(trAUC, tsAUC)
+```
+<br><hr>
+
+<p class="qiz">
+<span style="font-size:24px">`r "\U1F5FF"` 練習： </span><br>
+使用`TR$MemberID`以外的所有欄位，建立一個邏輯式回歸模型來預測`PoorCare`，並：<br>
+&emsp; 【A】 分別畫出`Training`和`Testing`的`DPP`<br>
+
+```{r}
+set.seed(88)
+split = sample.split(D$PoorCare, SplitRatio = 0.75)  # split vector
+TR = subset(D, split == TRUE)
+TS = subset(D, split == FALSE)
+```
+**預測機率分佈 (DPP) - Distribution of Predicted Probability (Training)**
+```{r}
+#TR作圖:模型組
+  glm3=glm(PoorCare ~. ,TR[2:14],family=binomial)
+glm3=glm(PoorCare~InpatientDays+ERVisits+OfficeVisits+Narcotics+DaysSinceLastERVisit+Pain+ProviderCount+MedicalClaims+ClaimLines+StartedOnCombination+AcuteDrugGapSmall,TR,family=binomial)
+summary(glm3)
+pred3 = predict(glm3, newdata=TR, type="response")
+data.frame(y=factor(TR$PoorCare), pred=pred3) %>% 
+  ggplot(aes(x=pred3, fill=y)) + 
+  geom_histogram(bins=20, col='white', position="stack")
+```
+
+**預測機率分佈 (DPP) - Distribution of Predicted Probability (Testing)**
+```{r}
+#TS作圖:對照組
+
+pred4 = predict(glm3, newdata=TS, type="response")
+data.frame(y=factor(TS$PoorCare), pred=pred4) %>% 
+  ggplot(aes(x=pred4, fill=y)) + 
+  geom_histogram(bins=20, col='white', position="stack")
+
+
+```
+
+&emsp; 【B】 分別畫出`Training`和`Testing`的`ROC`<br>
+```{r fig.height=4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.8)
+#colAUC(預測機率,目標向量,plotROC[畫ROC圖])
+trAUC = colAUC(pred3, y=TR$PoorCare, plotROC=T)
+tsAUC = colAUC(pred4, y=TS$PoorCare, plotROC=T)
+```
+&emsp; 【C】 分別算出`Training`和`Testing`的`ACC`、`SENS`和`SPEC`<br>
+```{r}
+#Training
+cmx3 = table(Acture=TR$PoorCare, Predict=pred3 > 0.5)
+cmx3
+
+
+#Testing
+cmx4 = table(Acture=TS$PoorCare, Predict=pred4 > 0.5)
+cmx4
+
+sapply(list(Train=cmx3, Test=cmx4), A2x2)
+```
+
+&emsp; 【D】 分別算出`Training`和`Testing`的`AUC`<br>
+```{r}
+c(trAUC, tsAUC)
+```
+
+&emsp; 【E】 跟用兩個預測變數的模型相比，這一個模型有比較準嗎？<br>
+```{r}
+#第一個只有兩個變數的模型
+#            Train  Test
+#accuracy    0.808 0.812
+#sensitivity 0.400 0.375
+#specificity 0.946 0.958
+#AUC()
+#[1] 0.77459 0.79948
+
+#第二個模型
+#            Train  Test
+#accuracy    0.798 0.844
+#sensitivity 0.440 0.500
+#specificity 0.919 0.958
+#AUC
+#[1] 0.87568 0.86458
+
+#由此可知AUC的準確度提升，並且但ACC的模型相較變低
+```
+
+&emsp; 【F】 為什麼它比較準(或比較不準)呢？<br><br>
+```{r}
+#[我們準確度要看AUC還是ACC?]
+#從簡單的理論出發解釋一下，兩者出現矛盾的可能原因。正確率是基於較佳的截斷值計算的，所以很多朋友覺得他應該可靠。但是他們可能不知道，AUC是基於所有可能的截斷值計算的，他應該更加穩健。
+#怎麼理解“穩健”這個詞呢？我們可以理解為計算正確率時所基於的較佳截斷值並不是總體分佈中的較佳截斷值，正確率只是某個隨機樣本的一個屬性指標。而AUC不關注某個截斷值的表現如何，可以綜合所有截斷值的預測效能，所以正確率高，AUC不一定大，反之亦然。
+
+#為甚麼會比較準，因為透過更多可解釋且合理的變數的加入，會容易驗別1與0的數值，因此AUC會提升。
+```
+
+</p class="qiz">
+
+<br><br><br><hr>

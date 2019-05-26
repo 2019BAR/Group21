@@ -1,0 +1,191 @@
+---
+title: UNIT13C：類別模型、預測機率與商業決策 
+subtitle: 預測與決策
+author: 中山大學管理學院 第21組
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: style.css
+---
+
+一起高分一起high<br>
+　　　　　   ／ <br>
+　　(^ o ^)／ <br>
+　／(　 ) <br>
+／　／＞ <br>
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# Formating Codes.  Do not change the codes in this chunk !!
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8)
+options(scipen=20, digits=5, width=80)
+if(!require(pacman)) install.packages("pacman")
+```
+<hr>
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pacman::p_load(caTools, ggplot2, dplyr)
+D = read.csv("data/quality.csv")  # Read in dataset
+set.seed(88)
+split = sample.split(D$PoorCare, SplitRatio = 0.75)  # split vector
+TR = subset(D, split == TRUE)
+TS = subset(D, split == FALSE)
+glm1 = glm(PoorCare ~ OfficeVisits + Narcotics, TR, family=binomial)
+summary(glm1)
+```
+<br><hr>
+
+### 【A】從預測到決策
+
+![Fig 13.3 - 從預測到決策](Fig13.3.JPG)
+
+<br><hr>
+
+### 【B】預測機率分佈 (DPP)
+因為這個資料集很小，我們使用全部的資料來做模擬 (通常我們是使用測試資料集)
+```{r fig.height=3.2, fig.width=7}
+pred = predict(glm1, D, type="response")
+y = D$PoorCare
+data.frame(pred, y) %>% 
+  ggplot(aes(x=pred, fill=factor(y))) + 
+  geom_histogram(bins=20, col='white', position="stack", alpha=0.5) +
+  ggtitle("Distribution of Predicted Probability (DPP,FULL)") +
+  xlab("predicted probability")
+```
+<br><hr>
+
+### 【C】試算期望報酬
+
+**報酬矩陣 Payoff Matrix**
+
++ TN: NoAction, GoodCare; 沒事   
++ FN: NoAction, PoorCare; 風險成本很高 
++ FP: Action, GoodCare;   預防成本
++ TP: Action, PoorCare;   預防成本 + 降低後的風險成本
+
+```{r}
+payoff = matrix(c(0,-100,-10,-50),2,2)
+payoff
+```
+
+**期望報酬 Expected Payoff**
+```{r fig.height=3.2, fig.width=7}
+cutoff = seq(0, 1, 0.01)
+result = sapply(cutoff, function(p) sum(
+  table(factor(y==1, c(F,T)), factor(pred>p, c(F,T))) 
+  # confusion matrix
+  * payoff ))
+i = which.max(result)
+par(cex=0.7, mar=c(4,4,3,1))
+plot(cutoff, result, type='l', col='cyan', lwd=2, main=sprintf(
+  "Optomal Expected Result: $%d @ %.2f",result[i],cutoff[i]))
+abline(v=seq(0,1,0.1),h=seq(-6000,0,100),col='lightgray',lty=3)
+points(cutoff[i], result[i], pch=20, col='red', cex=2)
+```
+<br><hr>
+
+### 【D】策略模擬
+<p class="qiz">
+<span style="font-size:24px">`r "\U1F5FF"` 練習： </span><br>
+執行`Sim13.R`，先依預設的報酬矩陣回答下列問題：<br>
+&emsp; 【A】 最佳臨界機率是？ 它所對應的期望報酬是多少？<br>
+```{r}
+#Answer:
+#最佳臨界機率是:0.16
+#其所對應的期望報酬是$-2360
+```
+
+&emsp; 【B】 什麼都不做時，臨界機率和期望報酬各是多少？<br>
+```{r}
+#什麼都不做時，臨界機率為1，期望報酬為-3300
+#pred > 1，result=100時
+table(factor(y == 1, c(F,T)), factor(pred > 1, c(F,T)))
+result[100]
+```
+
+&emsp; 【C】 每位保戶都做時，臨界機率和期望報酬各是多少？<br>
+```{r}
+#什麼都做時，臨界機率為0，期望報酬為-2630
+#pred > 0，result=1時
+table(factor(y == 1, c(F,T)), factor(pred > 0, c(F,T)))
+result[1]
+
+```
+
+&emsp; 【D】 以上哪一種做法期的望報酬比較高？<br>
+```{r}
+#當使用臨界機率的時候期望報酬最高
+```
+
+&emsp; 【E】 在所有的商務情境都是這種狀況嗎？<br><br>
+```{r}
+#當TP、FP、TN、FN 有任何改變的畫，情況就會改變。
+```
+
+藉由調整報酬矩陣：<br>
+&emsp; 【F】 模擬出「全不做」比「全做」還要好的狀況<br>
+```{r}
+#TN FN FP TP
+#-5,-100,-10,-20
+#此時的全不做可得到期望報酬為-1625,遠遠高於全做時的期望報酬-3790
+```
+
+&emsp; 【G】 並舉出一個會發生這種狀況的商務情境<br><br>
+```{r}
+#有些員工沒有保到勞保，身為雇主是否要將全部的人保起來？
+#當沒有保而沒有重大意外發生，只會-5，而沒有保卻發生大意外，就需要付出更多資源，因此-100
+#保的情況下，雖然要花比較多錢，但很安全因此發生問題也只有-20，沒發生問題只要-10。
+```
+
+有五種成本分別為`$5, $10, $15, $20, $30`的介入方法，它們分別可以將風險成本從`$100`降低到`$70, $60, $50, $40, $25` ...<br>
+&emsp; 【H】 它們的最佳期望報酬分別是多少？<br>
+```{r}
+# 投入$5 風險成本降低至$70
+#最佳報酬成本為-2830
+# 投入$10 風險成本降低至$60
+#最佳報酬成本為-2830
+# 投入$15 風險成本降低至$50
+#最佳報酬成本為-2775
+# 投入$20 風險成本降低至$40
+#最佳報酬成本為-2720
+# 投入$30 風險成本降低至$25
+#最佳報酬成本為-2700
+```
+
+&emsp; 【I】 哪一種介入方法的最佳期望報酬是最大的呢？<br><br>
+```{r}
+#成本為$30時,最佳期望報酬是最大的
+```
+
+</p class="qiz">
+
+**使用`manipulate`套件做策略模擬**
+```{r eval=F}
+library(manipulate)
+manipulate({
+  payoff = matrix(c(TN,FN,FP,TP),2,2)
+  cutoff = seq(0, 1, 0.01)
+  result = sapply(cutoff, function(p) sum(
+    table(factor(y==1, c(F,T)), factor(pred>p, c(F,T))) # confusion matrix
+    * payoff ))
+  i = which.max(result)
+  par(cex=0.7)
+  plot(cutoff, result, type='l', col='cyan', lwd=2, main=sprintf(
+    "Optomal Expected Result: $%d @ %.2f",result[i],cutoff[i]))
+  abline(v=seq(0,1,0.1),h=seq(-10000,0,100),col='lightgray',lty=3)
+  points(cutoff[i], result[i], pch=20, col='red', cex=2)
+  },
+  TN = slider(-100,0,   0,step=5),
+  FN = slider(-100,0,-100,step=5),
+  FP = slider(-100,0, -10,step=5),
+  TP = slider(-100,0, -50,step=5)
+  ) 
+```
+
+
+
+<br><br><br><hr>
