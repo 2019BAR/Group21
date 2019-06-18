@@ -1,0 +1,652 @@
+---
+title: group21_ final
+output: html_document
+---
+
+```{r echo=T, message=F, cache=F, warning=F}
+rm(list=ls(all=T))
+Sys.setlocale("LC_TIME","C")
+pacman::p_load(magrittr, readr, caTools, ggplot2, dplyr,d3heatmap,ggmap,mapproj,maps,maptools,splancs)
+```
+
+```{r}
+Z = read_csv("ta_feng_all_months_merged.csv") %>% data.frame %>% 
+  setNames(c("date","cust","age","area","cat","prod","qty","cost","price"))
+
+Z$date = as.Date(as.character(Z$date),format="%m/%d/%Y")
+```
+
+##### 彙總訂單 Assign Transaction ID
+```{r}
+Z$tid = group_indices(Z, date, cust) # same customer same day
+```
+
+##### 資料總覽
+```{r}
+# No. cust, cat, prod, tid
+sapply(Z[c("cust","cat","prod","tid")], n_distinct)
+# n_distinct 看資料欄位中有多少不一樣的值 tid是指有多少訂單 平均一個顧客有3張訂單
+```
+
+
+##### 顧客資料彙整
+
+##### 顧客摘要
+
+
+### 一、經營現況
+
+###  `購買頻率與售價關係`
+```{r}
+a = table(Z$prod)%>%sort %>% as.data.frame()
+z = merge(Z, a, by.x = "prod", by.y = "Var1")
+z3 = subset(z, z$Freq > 1500)
+z2 = subset(z, z$qty == 1)
+
+```
+
+```{r}
+z3a = subset(z3, z3$qty == 1)
+ggplot(z3a, aes(x = price, y = Freq, color =prod)) + geom_point() 
+```
+++我們將購買頻率超過1500次的商品歸類為「熱門商品」，從圖中可以看出16項最熱門商品的售價介於0~200元之間，從價錢推測可能是食品類、日常生活用品等
+```{r}
+z2 = subset(z, z$qty == 1)
+ggplot(z2, aes(x = price, y = Freq)) + geom_point() 
+```
+++從購買頻率與售價關係圖中，可以看出大豐雜貨店的主要訂單來自2000元以下的商品，2000元以上的商品個筆訂單數量大致都不超過50筆
+```{r}
+
+ggplot(z2, aes(x=cat, y=price, group = cat)) +  
+  geom_boxplot()
+```
+++產品類別編號越小的商品價錢區間越小，應屬於食品、日常生活用品類，而編號越大的商品則可能屬於價差較大的家電、娛樂用品等
+
+```{r}
+ggplot(z2, aes(x = log(cat), y = Freq)) + geom_point() 
+```
+++大致推測出產品類別編號越小的商品訂單購買次數越大，使用上較為頻繁
+
+### 二、顧客分群
+
+```{r}
+# 資料格式轉換
+Z$date = as.Date(Z$date, format="%m/%d/%Y")
+Z$age[is.na(Z$age)] = "na"
+Z$age = factor(Z$age, levels=c(
+  "<25","25-29","30-34","35-39","40-44","45-49","50-54","55-59","60-64",">65","na"), labels=c(
+  "20","25","30","35","40","45","50","55","60","65","na"
+  )) %>% as.character
+Z$area = paste0("z",Z$area)
+```
+
+##### 資料處理
+```{r}
+# Quantile of Variables
+sapply(Z[,7:9], quantile, prob=c(.99, .999, .9995))
+# Remove Outliers
+Z = subset(Z, qty<=24 & cost<=3800 & price<=4000) 
+Z$tid = group_indices(Z, date, cust) # same customer same day
+# No. cust, cat, prod, tid
+sapply(Z[c("cust","cat","prod","tid")], n_distinct)
+# n_distinct 看資料欄位中有多少不一樣的值 tid是指有多少訂單 平均一個顧客有3張訂單
+
+
+```
+##### 交易資料彙整
+```{r}
+X = Z %>% group_by(tid) %>% summarise(
+  date = date[1],             # 交易日期  
+  cust = cust[1],             # 顧客 ID
+  age = age[1],               # 顧客 年齡級別
+  area = area[1],             # 顧客 居住區別
+  items = n(),                # 交易項目(總)數
+  pieces = sum(qty),          # 產品(總)件數
+  total = sum(price),         # 交易(總)金額
+  gross = sum(price - cost)   # 毛利
+  ) %>% data.frame
+#nrow(X) # 119422多筆訂單  
+#summary(X)
+# Check Quantile & Remove Outliers
+sapply(X[,6:9], quantile, prob=c(.999, .9995, .9999))
+# Remove Outliers
+X = subset(X, items<=62 & pieces<95 & total<16000) 
+
+```
+
+##### 每周交易次數
+```{r fig.height=3, fig.width=7}
+par(cex=0.8)
+hist(X$date, "weeks", freq=T, las=2, main="No. Transaction per Week")
+```
+<br><hr>
+
+##### 顧客資料彙整
+```{r}
+d0 = max(X$date) + 1
+A = X %>% mutate(
+  days = as.integer(difftime(d0, date, units="days"))
+  ) %>% 
+  group_by(cust) %>% summarise(
+    r = min(days),      # recency
+    s = max(days),      # seniority
+    f = n(),            # frquency
+    m = mean(total),    # monetary
+    rev = sum(total),   # total revenue contribution
+    raw = sum(gross),   # total gross profit contribution
+    age = age[1],       # age group
+    area = area[1],     # area code
+  ) %>% data.frame      # 33241多位顧客
+#nrow(A)
+
+#summary(A) 
+```
+
+
+```{r}
+# Check & Save
+is.na(Z) %>% colSums
+is.na(X) %>% colSums
+is.na(A) %>% colSums
+A0 = A; X0 = X; Z0 = Z
+save(Z0, X0, A0, file="tf0.rdata")
+```
+
+
+###  `RFM顧客分群`
+
+```{r} 
+#想換成數值，並加入分群資料Y中
+age= as.numeric(A$age)
+#age1為轉換成數值後的age, 但存在na
+
+#A<-complete.cases(A)
+is.na(A)%>%table
+
+set.seed(111) 
+A$grp = kmeans(scale(A[,c(2,4,5)]),10)$cluster
+table(A$grp)  # 族群大小
+#summary(A)
+```
+
+```{r}
+#顧客群組屬性RFM
+group_by(A, grp) %>% summarise(
+  recent=mean(r), 
+  freq=mean(f),
+  senior=mean(s), #考慮要不要放
+  money=mean(m), 
+  size=n() ) %>% 
+  mutate( revenue = size*money/1000 )  %>% 
+  filter(size > 1) %>% 
+  ggplot(aes(x=freq, y=money)) +
+  geom_point(aes(size=revenue, col=recent),alpha=0.5) +
+  scale_size(range=c(4,30)) +
+  scale_color_gradient(low="green",high="red") +
+  scale_x_log10() + scale_y_log10(limits=c(300,5000)) + 
+  geom_text(aes(label = size ),size=3) +
+  theme_bw() + guides(size=F) +
+  labs(title="Customer Segements",
+       subtitle="(bubble_size:revenue_contribution; text:group_size)",
+       color="Recency") +
+  xlab("Frequency (log)") + ylab("Average Transaction Amount (log)")
+```
+圖形解析：
+
++ 將現有顧客分成十群，每個泡泡分別代表一群。
+
++ 4種屬性，大小、顏色、X軸與Y軸可供判讀。
+
+    + X軸：購買頻率。
+    + Y軸：平均交易金額(客單價)。
+    + 泡泡大小：反映這群顧客對你的營收貢獻。
+    + 泡泡顏色：越紅就代表越久沒來買，可能快要流失了。
+
++ 可以針對很常來買(頻率高)，買很少(客單價低)，去做行銷策略，擬定對這群顧客增加客單價的方法。
+
+目標族群分析(依營收排序)：
+
+    + 3942人：客單價中，營收貢獻高(可提高頻率)*
+    + 1840人：客單價高，營收貢獻高，高消費顧客(可提高頻率)*
+    + 2738人：客單價中，營收貢獻中，頻率低，將流失?(可考慮保留)**
+    + 8394人：客單價低，營收貢獻高，頻率很低(眾多的少消費低單價客群)*
+    + 2962人：客單價低，營收貢獻低，頻率很高(常消費低單價客群-可提高消費額)**
+    
++我們根據最近來店天數、頻率，以及單筆消費金額等三個變數製作顧客分群圖表，並額外增加族群大小，及營收貢獻等資訊。
+由顧客分群圖表，我們針對幾個具代表性、可作為目標族群的對象制定兩組行銷方案
+
++ 目標族群
+
+    + 目標族群Ａ：由1840、2738，以及3942三組人所組成的目標A，他們對總體的營收貢獻大，單筆消費金額高，我們希望能藉由提高目標族群的消費頻率，為雜貨店的收入帶來更進一步的改善
+    + 目標族群Ｂ：目標B則針對右邊2962人所組成的群體，他們的消費頻率高，是雜貨店的忠實顧客，但是消費金額則較低，因此希望藉由提高他們的消費金額強化對店內營收的貢獻
+
+
+
+```{r}
+table(X$age, X$area) %>%
+  as.data.frame.matrix%>%
+  d3heatmap(F,F,col="Blues")
+```
++而地區及年齡的熱圖則告訴我們，來自南港的顧客最多，汐止次之，是我們最需要留住的客群信義的人數雖然不多，但顏色相較其他地區仍較明顯，屬於未來可以極力開拓的的客群。
+
+
+
+### 三、行銷方案
+###  `行銷方案Ａ`
+```{r}
+#將日期加回資料框中
+B = X %>%
+  group_by(cust) %>% summarise(
+    date = date[1],     # date
+    f = n(),            # frquency
+    m = mean(total),    # monetary
+    rev = sum(total),   # total revenue contribution
+    raw = sum(gross),   # total gross profit contribution
+    age = age[1],       # age group
+    area = area[1],     # area code
+  ) %>% data.frame      # 33241多位顧客
+nrow(B)
+
+
+#增加week欄位
+week = format(B$date, format = "%a")
+set.seed(111) 
+grp = kmeans(scale(A[,c(2,4,5)]),10)$cluster
+B = mutate(B,grp,week)
+B$grp = as.character(B$grp)
+summary(B)
+
+#設定目標族群
+target = B$target
+B = mutate(B,target)
+to_Increase_frequency =c("6","9","10")
+B$target[B$grp %in% to_Increase_frequency] = TRUE
+B$target[B$grp %in% c("1","2","3","4","5","7","8","na")] = FALSE
+
+
+#取出目標族群的子集
+B_weekdis = subset(B,B$grp %in% to_Increase_frequency )
+B_weekdis$grp = factor(B_weekdis$grp, levels=c("6","9","10"),labels=c("2738","1840","3942"))
+
+nrow(B_weekdis)                                   #8520人
+summary(B_weekdis)
+
+#高單價低頻率族群佔所有顧客與營收的比率
+peorat = nrow(B_weekdis)/nrow(B)                  #所佔顧客比26.4%
+ggplot(B, aes(x=factor(1), fill=target))+
+  geom_bar(width = 1)+
+  coord_polar("y", start = 0)+
+  labs(x="", y="", title = "Customer ratio")+ 
+  scale_fill_brewer(palette = "Blues")+
+  theme_minimal()
+
+rawrat = (793.4*8520)/(484.6*32241)               #所佔營收比43.3%
+B$week =factor(B$week, levels=c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+ggplot(B,aes(x =week, y = raw, fill= target, col = target))+
+  geom_bar(stat="identity", position="stack")
+
+
+```
++目標族群Ａ是由人數為1840、2738，以及3942人等三個群體所組成，總人數共8520人，佔資料期間33241位顧客的 26.4 ％
++目標族群組成人數雖然相對其他族群少、消費頻率較低，但是對店裡的營收貢獻高、單筆購買金額大，他們主要的來店時段多為周末假日，年齡層分布以30-50歲居多。我們希望能夠在穩定平均單筆購買金額的前提下，藉由提高目標族群的消費頻率以增加店裡的總營收。
++行銷手段
+
+    + 1：平日促銷：由於目標客群多在假日消費，若是能結合平日信用卡優惠、推出每日促銷商品，誘使顧客提高平日來店消費的動機
+    + 2：VIP每月來店禮：雖然目標客群來店的頻率較低，但是單筆購買金額高，我們建議商家推出VIP方案，不只提高顧客黏著度，更能以每月來店禮為由，提高VIP客群來店的機會
+    + 3：限定期間的集點換贈活動：推出每月期間限定的集點換贈活動，達到特定金額即可兌換贈品，鼓勵目標客群在限定期間內來店購物，達到提高消費頻率的效果
+    + 4:線下結合線上，加入電商平台：由於目標客群多為中壯年族群，是家庭經濟來源的提供者，週一至週五需要工作，限制了平日來店消費的機會，若是店家加入電商平台則可以模糊購物時間和空間上的限制
+
+###  `行銷方案 B`
+```{r}
+set.seed(111) 
+
+A = X %>% mutate(
+  days = as.integer(difftime(d0, date, units="days"))
+  ) %>% 
+  group_by(cust) %>% summarise(
+    r = min(days),      # recency
+    s = max(days),      # seniority
+    f = n(),            # frquency
+    m = mean(total),    # monetary
+    rev = sum(total),   # total revenue contribution
+    raw = sum(gross),   # total gross profit contribution
+    age = age[1],       # age group
+    area = area[1],     # area code
+    items = items[1],
+    pieces = pieces[1]
+  ) %>% data.frame
+
+A$grp = kmeans(scale(A[,c(2,4,5)]),10)$cluster
+table(A$grp)  # 族群大小
+
+C=unique(A[,c(1,2,3,5:12)])  %>% left_join(Z[,c(1,2,5:9)],by = "cust")
+
+C05= filter(C, grp==5)
+C08= filter(C, grp==8)
+
+```
+
+
+```{r}
+C08 %>% group_by(cat) %>% summarise(
+  mean(price),
+  profit = sum(price-cost),
+  prod[1]
+) %>% arrange(desc(profit)) %>% head(10)
+
+C08 %>% group_by(prod) %>% summarise(
+  cat[1],
+  price[1],
+  profit = sum(price-cost)
+) %>% arrange(desc(profit)) %>% head(10)
+
+```
+
+#####行銷目標
++ 目標客群：族群8，2962族群
++ 主要來店時段：六、日
++ 居住地：集中在南港與汐止區，在這兩區的年齡層分布多為35-45區間
++ 35-45區間的人多集中於假日消費，來店頻率高
+
+
+#####行銷方案
+”320402“產品品項為族群8中獲利偏高之產品（排名2&4），其產品類別亦屬於此族群中的第一大產品類別，又此產品的定價落在一千初左右，將此產品類別假設為酒類產品
+“560201”產品品項定價約落於500元，架設此顫品類別為開架式美妝產品，且集中於美髮、美體產品。
+
+在本通路中，`假設熱銷產品為酒類產品與美容產品`，皆屬於消費者偏好前往實體通路會購買的產品，皆為毛利與單價較高的產品類別，因此在目標族群（族群8）中，為提高客單價，可從這兩項產品著手進行。
+
+**提高客單價之行銷手段**
+`1. 結帳窗口加價購服務`
+酒類：購買酒類產品單筆訂單達3999，即可加價120購買一支紅酒杯
+美容：美容美髮美體產品單筆消費滿2000，以690加價購買2小時指定spa療程
+`2. 滿額禮`：針對酒類產品，單筆消費滿12,000，送餐酒館禮卷1客，價值800，數量有限。
+`3. 平日促銷`：由於目標族群8之消費多集中於假日，為了提高平日的銷售，在平日推出產品促銷方案，搭配指定信用卡，購買酒類與美容產品皆打8折優惠。
+`4. 體驗活動`：針對美妝產品，邀請專業美容師，舉辦現場體驗贈送試用包，並且消費者在體驗後可以優惠價格組合選購產品。
+`5. 提供便利購服務`：針對酒類產品，單筆訂單滿2000，至店裡消費亦可宅配到家免運費。
+
+### 四、預期成效
+```{r}
+#載入資料
+G<-read_csv("ta_feng_all_months_merged.csv")
+
+#轉換日期:整理日期、+上weekday、+上月份
+G$TRANSACTION_DT<-as.Date(G$TRANSACTION_DT,format="%m/%d/%Y")
+G<-G%>%mutate(wday=format(G$TRANSACTION_DT,"%u"))
+G<-G%>%mutate(month=format(G$TRANSACTION_DT,"%B"))
+
+#查看資料
+#str(G)
+#summary(G)
+table(G$AGE_GROUP)
+levels(G$AGE_GROUP)=c(1:11)
+
+table(G$PIN_CODE)
+duplicated(G$TRANSACTION_DT)%>%table
+table(G$wday)
+table(G$month)
+
+#重新設定名稱
+G<-G%>%data.frame%>%
+  set_colnames(c("date", "cid" , "age","area","cat","prod","qty","cost","price","wday","month"))
+G[is.na(G)] = "na"
+```
+
+
+
+
+```{r}
+#過濾極端直
+sapply(G[7:9],quantile,prob=c(0.9,0.999,0.9995))
+G<-subset(G,qty<=24&cost<=3800 & price<=4000)
+#彙總訂單 查看同一個顧客再特定一天內購買物
+G$tid<-group_indices(G,date,cid)
+```
+
+交易紀錄整理
+```{r}
+D<-G %>% group_by(tid)%>% summarize(
+  date = date[1],              
+  cid = cid[1],            
+  age = age[1],              
+  area = area[1],            
+  items = n(),                
+  pieces = sum(qty),          
+  total = sum(price),         
+  gross = sum(price - cost)  
+  ) %>% data.frame
+#削去離群直
+sapply(D[6:9],quantile,prob=c(0.99,0.999,0.9995))
+
+D<-subset(D,items<=62&pieces<95&total<16000)
+
+```
+
+顧客資料
+```{r}
+d0<-max(G$date)+1
+C<-D%>%mutate(days=as.integer(difftime(d0,date),units="days"))%>%
+  group_by(cid) %>% summarise(
+    r = min(days),      #近期使用日期
+    s = max(days),      # 年資
+    f = n(),            # 購買的個數
+    m = mean(total),    # 平均金額
+    rev = sum(total),   # 總金額
+    gros = sum(gross),   # 總毛利
+    age = age[1],       # 年齡
+    area = area[1],     # 位置
+     ) %>% data.frame   
+
+set.seed(111) #有問題???
+C$grp = kmeans(scale(C[,c(2,4,5)]),10)$cluster
+table(C$grp)  
+```
+
+分割預測變數與目標變數
+預測變數
+```{r}
+feb<-as.Date("2001-02-01")
+X0<-subset(G,date<feb)
+```
+交易紀錄
+```{r}
+D1<- group_by(X0,tid)%>% summarize(
+ date = first(date),  # 交易日期
+  cid = first(cid),  # 顧客 ID
+  age = first(age),    # 顧客 年齡級別
+  area = first(area),  # 顧客 居住區別
+  items = n(),                # 交易項目(總)數
+  pieces = sum(qty),          # 產品(總)件數
+  total = sum(price),         # 交易(總)金額
+  gross = sum(price - cost)   # 毛利
+  ) %>% data.frame
+```
+
+移出outlier
+```{r}
+sapply(D1[6:8],quantile,prob=c(0.99,0.999,0.9995))
+D1<-subset(D1,items<=64&pieces<=98&total<=11260)
+```
+建立顧客資料
+```{r}
+d0<-max(D1$date)+1
+C1<-D1%>%mutate(days=as.integer(difftime(d0,date),units="days"))%>%
+  group_by(cid) %>% summarise(
+    r = min(days),      #近期使用日期
+    s = max(days),      # 年資
+    f = n(),            # 購買的個數
+    m = mean(total),    # 平均金額
+    rev = sum(total),   # 總金額
+    gros = sum(gross),   # 總毛利
+    age = age[1],       # 年齡
+    area = area[1] ,     # 位置
+     ) %>% data.frame  
+```
+
+目標變數
+<1>
+```{r}
+Y1<-filter(D,date>=feb)%>%group_by(cid)%>%summarize(
+  amount=sum(total))
+
+```
+
+彙整
+```{r}
+X<-merge(C1,Y1,by="cid",all.x=T)
+```
+找出未來買過的人
+```{r}
+table(is.na(X$amount))
+X$buy<-!is.na(X$amount)
+```
+建立Buy模型與數量模型的TR TS
+1.Buy模型
+```{r}
+X1<-subset(D1, cid %in% X$cid & date < as.Date("2001-02-01"))
+G1<-subset(G,cid %in% X$cid&date<as.Date("2001-02-01"))
+set.seed(2018); spl = sample.split(X$buy, SplitRatio=0.7)
+#c(nrow(C1), sum(spl), sum(!spl))
+```
+2.數量模型
+```{r}
+X2<-subset(X,buy) %>% mutate_at(c("m","rev","amount"), log10)
+n=nrow(X2)
+set.seed(2018); spl2 <- 1:n %in% sample(1:n, round(0.7*n))
+#c(nrow(X2), sum(spl2), sum(!spl2))
+```
+
+```{r}
+cbind(X2, spl2) %>% 
+  ggplot(aes(x=amount)) + geom_density(aes(fill=spl2), alpha=0.5)
+```
+#--------------------------------------------------------------------
+命名TRTS
+```{r}
+TR = subset(X, spl)
+TS = subset(X, !spl)
+```
+
+建立Buy回歸
+```{r}
+glm1<-glm(buy~.,TR[,c(2:6,8,9,11)],family=binomial)
+pred=predict(glm1,TS,type="response")
+cm=table(actual=TS$buy,predict=pred>0.5);cm
+```
+ACC精準度
+```{r}
+acc.ts = cm %>% {sum(diag(.))/sum(.)}; acc.ts
+```
+AUC辨識度 
+```{r}
+colAUC(pred, TS$buy)    
+```
+數量模型
+```{r}
+X2 = subset(X, X$buy) %>% mutate_at(c("m","rev","amount"), log10)
+TR1=subset(X2,spl2)
+TS1=subset(X2,!spl2)
+```
+
+```{r}
+glm2<-lm(amount~.,TR1[,c(2:6,8:10)])
+
+```
+計算R-square
+```{r}
+r2.tr = summary(glm2)$r.sq
+SST = sum((TS1$amount - mean(TR1$amount))^ 2)
+SSE = sum((predict(glm2, TS1) -  TS1$amount)^2)
+r2.ts = 1 - (SSE/SST)
+#c(r2.tr, r2.ts)
+```
+
+### Prediction
+```{r}
+d0 = max(X1$date) + 1
+B = X1 %>% 
+  filter(date >= as.Date("2000-12-01")) %>% 
+  mutate(days = as.integer(difftime(d0, date, units="days"))) %>% 
+  group_by(cid) %>% summarise(
+    r = min(days),      # recency
+    s = max(days),      # seniority
+    f = n(),            # frquency
+    m = mean(total),    # monetary
+    rev = sum(total),   # total revenue contribution
+    raw = sum(gross),   # total gross profit contribution
+    age = age[1],       # age group
+    area = area[1],     # area code
+  ) %>% data.frame      # 28584
+#nrow(B)
+```
+
+```{r}
+B$Buy = predict(glm1, B, type="response")
+```
+
+```{r}
+B$Rev = predict(glm2, B)
+```
+
+預測後的特徵變化
+```{r}
+a<-B%>%group_by(age)%>%
+  summarize(
+    Rev=sum(rev)
+  )
+ggplot(a,aes(age,Rev))+geom_bar(stat="identity",ylim=c(1000000,15000000))
+
+B$age%>%table%>%barplot
+
+```
++這個模型用來判斷不同年齡區間之消費者的消費金額總和，可以建議未來應該往哪個族群去進行更多元的行銷策略。由模型可知，35~39歲的客群不僅是購買率最高，也是消費金額最龐大的一個族群。
+
+
+
+預期購買的機率分布
+```{r}
+hist(B$Buy,main="probability of buy",xlab="probability")
+```
++購買模型是預期舊有顧客一月會來雜貨店消費的機率，可以發現機率大多都在20~30%之間，建議大豐雜貨店需要對於顧客忠誠度以及平台黏著性做適當的改善。
+
+
+
+每個單位的行銷成本為100，行銷效益為0.8
+```{r}
+cost=100
+effect=0.8
+
+target<-left_join(B,C,by="cid")
+mean(target$Buy)
+mean(target$Rev)
+
+
+target<-left_join(B,C,by="cid")
+target<-subset(target,target$grp==8)
+target$ExpReturn = (effect - target$Buy  ) * target$Rev - cost
+mean(target$ExpReturn)
+summary(target$ExpReturn)
+```
++我們針對方案 B進行行銷預期報酬的推算。我們設定每單位行銷成本為100元，預估效益0.8，
+可以看到總平均落在-55.2528，這項結果讓我們知道行銷策略B對於目標族群的預計報酬為負值。
+
+
+
+```{r}
+target %>% arrange(desc(ExpReturn)) %>% select(cid, ExpReturn) %>% head(15)
+```
+
+```{r}
+sum(target$ExpReturn > 0)
+sum(target$ExpReturn[target$ExpReturn > 0])
+```
++不要緊張！！
+雖然對於整個目標族群可能會是負值。
+但透過排序看到，前10高的消費者，預期報酬至少都高達360以上，最高更可能超過600，仍然是有利可圖的。
+所以，我們只要將目標族群劃分的更細，將預期報酬較大的對象挑選出來，就能達到最大的效益。
++在實務上，
+我們可以找出這521個預期報酬大於零的顧客，並針對他們推廣行銷，
+就可能得到高達4萬三千元的預期報酬。
+
+
+
+
